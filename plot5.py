@@ -1,3 +1,6 @@
+# To run use for example `python3.11 plot5.py ./WaveForms_2D.root lappd63_laser_on_test 10`
+# python3 plot5.py [rootfile] [name_of_the_pdf] [number_of_events]
+
 import uproot
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
@@ -33,9 +36,9 @@ with PdfPages(output_name+".pdf") as pdf:
         print(row_t,colum_t)
         # Plot the histograms side by side
         im0 = axs[0,0].imshow(data_event0.T, origin="lower", cmap="viridis", aspect="auto")
-        axs[0,0].set_title(f"ACDC 0 Event {i}")
-        axs[0,0].set_xlabel("Time (sample)")
-        axs[0,0].set_ylabel("Strip (1-26)")
+        axs[0,0].set_title(f"Side 0 Event {i}")
+        axs[0,0].set_xlabel("Time [ns]")
+        axs[0,0].set_ylabel("Strip")
         cbar0 = fig.colorbar(im0, ax=axs[0,0])
         cbar0.set_label('Amplitude [mV]')
 
@@ -46,13 +49,13 @@ with PdfPages(output_name+".pdf") as pdf:
             # Plot the 1D histogram
             axs[1,0].plot(y_projection, label=f"Bin {j}")
 
-        axs[1,0].set_xlabel("Time (sample)")
+        axs[1,0].set_xlabel("Time [ns]")
         axs[1,0].set_ylabel("Amplitude [mV]")
 
         im1 = axs[0,1].imshow(data_event1.T, origin="lower", cmap="viridis", aspect="auto")
-        axs[0,1].set_title(f"ACDC 1 Event {i}")
-        axs[0,1].set_xlabel("Time (sample)")
-        axs[0,1].set_ylabel("Strip (1-26)")
+        axs[0,1].set_title(f"Side 1 Event {i}")
+        axs[0,1].set_xlabel("Time [ns]")
+        axs[0,1].set_ylabel("Strip")
         cbar1 = fig.colorbar(im1, ax=axs[0,1])
         cbar1.set_label('Amplitude [mV]')
 
@@ -63,7 +66,7 @@ with PdfPages(output_name+".pdf") as pdf:
             # Plot the 1D histogram
             axs[1,1].plot(y_projection, label=f"Bin {j}")
 
-        axs[1,1].set_xlabel("Time (sample)")
+        axs[1,1].set_xlabel("Time [ns]")
         axs[1,1].set_ylabel("Amplitude [mV]")
         
         # Add the plot to the PDF file

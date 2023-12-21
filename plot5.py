@@ -1,5 +1,5 @@
 # To run use for example `python3.11 plot5.py ./WaveForms_2D.root lappd63_laser_on_test 10`
-# python3 plot5.py [rootfile] [name_of_the_pdf] [number_of_events]
+# python3 plot5.py [path/rootfile_name] [name_of_the_pdf] [number_of_events]
 
 import uproot
 import matplotlib.pyplot as plt

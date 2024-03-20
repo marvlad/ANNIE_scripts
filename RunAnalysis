@@ -26,4 +26,4 @@ mv configfiles/LAPPDana/output_file2.txt configfiles/LAPPDana/ConfigASCIIReadIn
 ./Analyse configfiles/LAPPDana/ToolChainConfig
 
 # Plot some event with the python script
-python3 plot5.py /LAPPD_Tool/$file $Name $((NEvents/10))
+python3 plot5.py /LAPPD_Tool/$file $Name $((NEvents/10)) 0

@@ -68,6 +68,8 @@ with PdfPages(output_name+".pdf") as pdf:
 
                 # Loop over each bin of the projected 2D histogram and plot the 1D histogram
                 for j in range(data_event1.shape[1]):
+                    if spare_channels == 1 and (j == 0 or j == 29):
+                            continue
                     y_projection = data_event1[:, j]
 
                     # Plot the 1D histogram

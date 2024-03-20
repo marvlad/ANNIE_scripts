@@ -15,6 +15,8 @@ output_name = sys.argv[2]
 nevent = int(sys.argv[3])
 spare_channels = int(sys.argv[4])
 
+print("Plotting the events....")
+
 # Open the ROOT file and access the TDirectoryFile
 file = uproot.open(filepath)
 directory = file["off_beam"]
@@ -84,3 +86,4 @@ with PdfPages(output_name+".pdf") as pdf:
                 progress_bar.update(1)
 
         progress_bar.close()
+        print("Plotting done....")

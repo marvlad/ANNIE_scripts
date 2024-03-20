@@ -1,4 +1,5 @@
 #!/bin/bash
+# After `chmod 777 RunLAPPDana` run the script `./RunLAPPDana /PATH/file.txt`
 
 PATHFILE=$1
 

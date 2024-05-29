@@ -5,7 +5,7 @@
 ## mailto: ascarpell@bnl.gov
 #####################################################################################################################################
 
-# Sliglty modify my M. Ascencio
+# Sliglty modify by M. Ascencio
 
 import urllib.request, sys
 from datetime import datetime, tzinfo, timedelta

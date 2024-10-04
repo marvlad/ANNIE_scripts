@@ -16,7 +16,7 @@ fi
 # in case there is no symbolic
 
 echo "###################################################################################################"
-echo "Making the symbolic" 
+echo "Making the symbolic link" 
 ln -s configfiles/$1/ToolChainConfig $1
 
 # default tools 

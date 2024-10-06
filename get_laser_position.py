@@ -86,7 +86,7 @@ if __name__=="__main__":
 		d_extra_sleeve_ask = sleeve_length - d_top_pmt_ask%sleeve_length
 		print( "-------------------------------")
 		print( "-------------------------------")
-		print( "To have the source located at (%.2f, %.2f, %.2f),you need to have %i sleeves in the calibration port and a distance of %.2f cm between the top of last sleeve (out of the port) and top of calibration port [cm]" % (X_pos_ports[n_port-1], Y_pos_ports[n_port-1], Zpos_number,n_sleeves_ask,d_extra_sleeve_ask))
+		print( "To have the source located at (%.2f, %.2f, %.2f),you need to have %i sleeves in the calibration port and a distance of %.2f cm (+ 2.4 if SANDI is deployd [port 5 only]) between the top of last sleeve (out of the port) and top of calibration port [cm]" % (X_pos_ports[n_port-1], Y_pos_ports[n_port-1], Zpos_number,n_sleeves_ask,d_extra_sleeve_ask))
 		
 		source_X_beam = X_pos_ports[n_port-1]
 		source_Y_beam = Y_pos_ports[n_port-1]

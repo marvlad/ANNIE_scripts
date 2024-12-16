@@ -98,7 +98,7 @@ setBuild(){
         echo "}" >> UserTools/Factory/Factory.cpp
         
         echo -e "\t DONE!"
-        echo -e "\t Now go to ../build_$1, execute the container and compile it. Use make clean; make"
+        echo -e "\t Now go to ../build_$1, execute the container and compile it. Use cd ../build_$1; source Setup.sh; make clean; make"
 }
 # Check the arguments
 if [ $# -eq 0 ]; then

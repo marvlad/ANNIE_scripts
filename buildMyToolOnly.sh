@@ -97,14 +97,14 @@ setBuild(){
         echo "return ret;" >> UserTools/Factory/Factory.cpp
         echo "}" >> UserTools/Factory/Factory.cpp
         
-        echo -e "DONE!"
-        echo -e "Now go to ../build_$1, execute the container and compile it. User make clean; make"
+        echo -e "\t DONE!"
+        echo -e "\t Now go to ../build_$1, execute the container and compile it. Use make clean; make"
 }
 # Check the arguments
 if [ $# -eq 0 ]; then
     echo "###################################################################################################"
-    echo "#  No arguments provided. Please provide at least one argument.                                   #"
-    echo "#  Usage: '$0 [Toolchain_name]' or '$0 [Toolchain_name] clean'                               #"
+    echo "#  No arguments provided. Please provide at least one argument.                                    "
+    echo "#  Usage: '$0 [Toolchain_name]' or '$0 [Toolchain_name] clean'                                     "
     echo "###################################################################################################"
     exit 1
 fi

@@ -100,7 +100,7 @@ setBuild(){
         echo -e "DONE!"
         echo -e "Now go to ../build_$1, execute the container and compile it. User make clean; make"
 }
-
+# Check the arguments
 if [ $# -eq 0 ]; then
     echo "###################################################################################################"
     echo "#  No arguments provided. Please provide at least one argument.                                   #"

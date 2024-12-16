@@ -7,52 +7,66 @@ setBuild(){
         # Copy the main tools, scripts, etc
         #%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
         echo -e "\t ####################################################"
-        echo -e "\t ############# Preparing $1 "
+        echo -e "\t ############# Preparing $(echo "$1" | tr ',' '_') "
         echo -e "\t ####################################################"
-        echo -e "\t ####### Making the $1 dir"
+        echo -e "\t ####### Making the $(echo "$1" | tr ',' '_') dir"
         cd ../ # Because I am script dir now
-        mkdir -p build_$1/UserTools
-        mkdir -p build_$1/configfiles
+        DIR_NAME="build_$(echo "$1" | tr ',' '_')"
+        IFS=',' read -r -a tools <<< "$1"
 
-        echo -e "\t ####### Copying Makefile, DataModel, lib, src, include, linkdef* and Setup.sh to $1"
-        cp Setup.sh build_$1/
-        cp Makefile build_$1/
-        cp -r DataModel build_$1/
-        cp -r lib build_$1/
-        cp -r src build_$1/
-        cp -r include build_$1/
-        cp linkdef* build_$1/
+        if [ -d $DIR_NAME ]; then
+           echo -e "\t Ha! Directory '$DIR_NAME' exists. Removing it..."
+           rm -rf $DIR_NAME
+           echo -e "\t Directory '$DIR_NAME' removed."
+        fi
+
+        mkdir -p $DIR_NAME/UserTools
+        mkdir -p $DIR_NAME/configfiles
+
+        echo -e "\t ####### Copying Makefile, DataModel, lib, src, include, linkdef* and Setup.sh to $DIR_NAME"
+        cp Setup.sh $DIR_NAME/
+        cp Makefile $DIR_NAME/
+        cp -r DataModel $DIR_NAME/
+        cp -r lib $DIR_NAME/
+        cp -r src $DIR_NAME/
+        cp -r include $DIR_NAME/
+        cp linkdef* $DIR_NAME/
 
         darray=("recoANNIE" "PlotWaveforms" "Factory" "Examples")
         echo -e "\t ####### Copying the default Tools"
         for element in "${darray[@]}"; do
                 echo -e "\t\t @@@@@@@@ Copying $element"
-                cp -r UserTools/$element build_$1/UserTools
+                cp -r UserTools/$element $DIR_NAME/UserTools
         done
 
-        echo -e "\t ####### Copying configfile/$1"
-        cp -r configfiles/$1 build_$1/configfiles
-        cp -r configfiles/LoadGeometry build_$1/configfiles
-        toolschain="configfiles/$1/ToolsConfig"
-        echo -e "\t ####### Extracting the tools used in $toolschain"
-        array=($(grep -v '^#' $toolschain | awk '{print $2}'))
-        echo -e " "
+        for tool in "${tools[@]}"; do
+            echo -e "\t ####### Copying configfile/$tool"
+        done
+        cp -r configfiles/LoadGeometry $DIR_NAME/configfiles
+
+        array=()
+        for tool in "${tools[@]}"; do
+            cp -r configfiles/$tool $DIR_NAME/configfiles
+            toolschain="configfiles/$tool/ToolsConfig"
+            array+=($(grep -v '^#' $toolschain | awk '{print $2}'))
+        done
         echo -e "\t ####################################################"
         echo -e "\t \t Extracted tools : "
         for element in "${array[@]}"; do
                 echo -e "\t \t \t \t tool ---->  " $element
         done
         echo -e "\t ####################################################"
-
         echo -e "\t ####### Copying the extracted Tools"
         for element in "${array[@]}"; do
-                cp -r UserTools/$element build_$1/UserTools
+                cp -r UserTools/$element $DIR_NAME/UserTools
         done
 
-        cd build_$1
+        cd $DIR_NAME
 
         echo -e "\t ####### Making the symbolic links"
-        ln -s configfiles/$1/ToolChainConfig $1
+        for tool in "${tools[@]}"; do
+            ln -s configfiles/$tool/ToolChainConfig $tool
+        done
         ln -s /ToolAnalysis/ToolDAQ ToolDAQ
 
         # Making the Unity.h
@@ -96,31 +110,36 @@ setBuild(){
         done
         echo "return ret;" >> UserTools/Factory/Factory.cpp
         echo "}" >> UserTools/Factory/Factory.cpp
-        
+
         echo -e "\t DONE!"
-        echo -e "\t Now go to ../build_$1, execute the container and compile it. Use cd ../build_$1; source Setup.sh; make clean; make"
+        echo -e "\t Now go to ../$DIR_NAME, execute the container and compile it. Use cd ../$DIR_NAME; source Setup.sh; make clean; make"
 }
 # Check the arguments
 if [ $# -eq 0 ]; then
     echo "###################################################################################################"
     echo "#  No arguments provided. Please provide at least one argument.                                    "
-    echo "#  Usage: '$0 [Toolchain_name]' or '$0 [Toolchain_name] clean'                                     "
+    echo "#  Usage: '$0 [Toolchain_name]' or"
+    echo "#         '$0 \"Tool1,Tool2,...\"' or"
+    echo "#         '$0 [Toolchain_name] clean'                             "
     echo "###################################################################################################"
     exit 1
 fi
 
-TOOLCHAIN_NAME=$1
-CONFIG_DIR="../configfiles/${TOOLCHAIN_NAME}"
+DIR_NAME="build_$(echo "$1" | tr ',' '_')"
+CONFIG_DIR="../configfiles/"
+IFS=',' read -r -a tools <<< "$1"
 
 if [ $# -eq 1 ]; then
-    if [ ! -d "$CONFIG_DIR" ]; then
-        echo "Error: Toolchain '$TOOLCHAIN_NAME' does not exist in 'configfiles/'."
-        exit 1
-    fi
-    setBuild $TOOLCHAIN_NAME
+    for tool in "${tools[@]}"; do
+       if [ ! -d "$CONFIG_DIR/$tool" ]; then
+          echo "ERROR: Directory 'configfiles/$tool' does not exist."
+          exit 1
+       fi
+    done
+    setBuild $1
 elif [ $# -eq 2 ] && [ "$2" == "clean" ]; then
-    rm -rf ../build_$TOOLCHAIN_NAME
+    rm -rf ../$DIR_NAME
 else
-    echo "Invalid argument. Usage: '$0 [Toolchain_name]' or '$0 [Toolchain_name] clean'"
+    echo "Invalid argument. Usage: '$0 [Toolchain_name]' or '$0 "Tool1,Tool2,..." or '$0 [Toolchain_name] clean'"
     exit 1
 fi

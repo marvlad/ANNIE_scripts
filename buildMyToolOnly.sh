@@ -140,6 +140,6 @@ if [ $# -eq 1 ]; then
 elif [ $# -eq 2 ] && [ "$2" == "clean" ]; then
     rm -rf ../$DIR_NAME
 else
-    echo "Invalid argument. Usage: '$0 [Toolchain_name]' or '$0 "Tool1,Tool2,..." or '$0 [Toolchain_name] clean'"
+    echo "Invalid argument. Usage: '$0 [Toolchain_name]' or '$0 \"Tool1,Tool2,...\" or '$0 [Toolchain_name] clean'"
     exit 1
 fi

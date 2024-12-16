@@ -99,4 +99,12 @@ setBuild(){
         cd ../build_$1
 }
 
+# Check if no arguments are passed
+if [ $# -eq 0 ]; then
+    echo "###################################################################################################"
+    echo "#  No arguments provided. Please provide at least one argument.                                   #"
+    echo "#  Usage: '$0 [Toolchain_name]'                                                 #"
+    echo "###################################################################################################"
+    exit 1
+fi
 setBuild $1

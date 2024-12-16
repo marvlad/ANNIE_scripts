@@ -99,12 +99,26 @@ setBuild(){
         cd ../build_$1
 }
 
-# Check if no arguments are passed
 if [ $# -eq 0 ]; then
     echo "###################################################################################################"
     echo "#  No arguments provided. Please provide at least one argument.                                   #"
-    echo "#  Usage: '$0 [Toolchain_name]'                                                 #"
+    echo "#  Usage: '$0 [Toolchain_name]' or '$0 [Toolchain_name] clean'                               #"
     echo "###################################################################################################"
     exit 1
 fi
-setBuild $1
+
+TOOLCHAIN_NAME=$1
+CONFIG_DIR="configfiles/${TOOLCHAIN_NAME}"
+
+if [ $# -eq 1 ]; then
+    if [ ! -d "$CONFIG_DIR" ]; then
+        echo "Error: Toolchain '$TOOLCHAIN_NAME' does not exist in 'configfiles/'."
+        exit 1
+    fi
+    setBuild $TOOLCHAIN_NAME
+elif [ $# -eq 2 ] && [ "$2" == "clean" ]; then
+    rm -rf build_$TOOLCHAIN_NAME
+else
+    echo "Invalid argument. Usage: '$0 [Toolchain_name]' or '$0 [Toolchain_name] clean'"
+    exit 1
+fi

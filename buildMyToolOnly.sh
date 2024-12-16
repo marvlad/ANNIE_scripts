@@ -110,7 +110,7 @@ if [ $# -eq 0 ]; then
 fi
 
 TOOLCHAIN_NAME=$1
-CONFIG_DIR="configfiles/${TOOLCHAIN_NAME}"
+CONFIG_DIR="../configfiles/${TOOLCHAIN_NAME}"
 
 if [ $# -eq 1 ]; then
     if [ ! -d "$CONFIG_DIR" ]; then

@@ -64,7 +64,7 @@ print(index)
 
 # Read the mapping from map2.txt
 mapping = {}
-with open('map2.txt', 'r') as f:
+with open('map.txt', 'r') as f:
     reader = csv.reader(f)
     for row in reader:
         if row:

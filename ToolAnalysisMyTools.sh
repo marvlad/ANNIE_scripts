@@ -2,6 +2,25 @@
 # Dummy test by M. Ascencio, Dec-2024
 # mascenci@fnal.gov
 
+##########################################################################
+# chmod +x ToolAnalysisMyTools.sh
+# Description: The script creates a build_{configfileName} directory in ./ToolAnalysis. It copies
+# the necessary default files and directories to build_{configfileName} in addition to the toolchains
+# used in your configfileName. You will need to `source Setup.sh` in the build_{configfileName} directory
+# and compile with `make clean` and `make`. WARNING, do not use `make -jN` where N is the number of cores.
+# For some reason `make -jN` will compile fine but the Total events for example will be random. 
+#
+# USE:
+# ./ToolAnalysisMyTools.sh configfileName
+#
+# If its more than one configfileName you need to use a "," without space as follows:
+# ./ToolAnalysisMyTools.sh "configfileName1,configfileName2,..." 
+#
+# You can clean the built directory with:
+# ./ToolAnalysisMyTools.sh configfileName clean
+# ./ToolAnalysisMyTools.sh "configfileName1,configfileName2,..." clean
+##########################################################################
+
 setBuild(){
 
         # Copy the main tools, scripts, etc
@@ -118,9 +137,10 @@ setBuild(){
 if [ $# -eq 0 ]; then
     echo "###################################################################################################"
     echo "#  No arguments provided. Please provide at least one argument.                                    "
-    echo "#  Usage: '$0 [Toolchain_name]' or"
-    echo "#         '$0 \"Tool1,Tool2,...\"' or"
-    echo "#         '$0 [Toolchain_name] clean'                             "
+    echo "#  Usage: '$0 [configfileName]' or"
+    echo "#         '$0 \"configfileName1,configfileName2,...\"' or"
+    echo "#         '$0 [configfileName] clean'         or "
+    echo "#         '$0 \"configfileName1,configfileName2\" clean'   "
     echo "###################################################################################################"
     exit 1
 fi
@@ -140,6 +160,6 @@ if [ $# -eq 1 ]; then
 elif [ $# -eq 2 ] && [ "$2" == "clean" ]; then
     rm -rf ../$DIR_NAME
 else
-    echo "Invalid argument. Usage: '$0 [Toolchain_name]' or '$0 \"Tool1,Tool2,...\" or '$0 [Toolchain_name] clean'"
+    echo "Invalid argument. Usage: '$0 [configfileName]' or '$0 \"configfileName1,configfileName2,...\" or '$0 [configfileName] clean'"
     exit 1
 fi

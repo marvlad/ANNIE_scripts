@@ -1,0 +1,29 @@
+#! /bin/bash
+# Quick script to run the Analyse 
+# change to `chmod 777 RunAnalyse` 
+
+Path=$1
+NEvents=$2
+Name=$3
+file=$4
+
+source Setup.sh
+
+# Get the name of one inputfile
+filename=$(ls ${Path}|head -n 1)
+
+# Replacing the numbers if events in ToolChainConfig
+awk '{ if (NR == 24) print "Inline '$NEvents' ## number of Execute steps in program, -1 infinite loop that is ended by user"; else print $0}' configfiles/LAPPDana/ToolChainConfig > configfiles/LAPPDana/output_file.txt
+rm -f configfiles/LAPPDana/ToolChainConfig
+mv configfiles/LAPPDana/output_file.txt configfiles/LAPPDana/ToolChainConfig
+
+# Replacing the input path
+awk '{ if (NR == 18) print "PSECinputfile '$Path'/'$filename'"; else print $0}' configfiles/LAPPDana/ConfigASCIIReadIn > configfiles/LAPPDana/output_file2.txt
+rm -f configfiles/LAPPDana/ConfigASCIIReadIn
+mv configfiles/LAPPDana/output_file2.txt configfiles/LAPPDana/ConfigASCIIReadIn
+
+# Running the toolchain
+./Analyse configfiles/LAPPDana/ToolChainConfig
+
+# Plot some event with the python script
+python3 plot5.py /LAPPD_Tool/$file $Name $((NEvents/10)) 0

@@ -45,6 +45,21 @@ public:
 
     bool isValid() const { return valid_; }
 
+    void writeRoofile(std::string outname){
+        TFile *fout = TFile::Open(outname.c_str(), "RECREATE");
+        fout->cd();
+        h_cond_->Write();
+        int totalIndex = h_cond_->GetNbinsX();
+        
+        for (int i=1; i < totalIndex; i++){
+            TH1D* sl = getSlice(i);
+            sl->Write();
+        }
+        
+
+        fout->Close();
+    }
+
 private:
     bool valid_ = false;
     TH2F* h_cond_ = nullptr;

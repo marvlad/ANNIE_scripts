@@ -7,13 +7,13 @@ int main() {
 
     gRandom->SetSeed(0);
 
-    ConditionalDT cond("analysis.root", "h_deltat_vs_energy_numu_all");
+    ConditionalDT cond("/tmp/analysis.root", "h_deltat_vs_energy_numu_all");
 
     if (!cond.isValid()) {
         std::cout << "Could not load conditional Delta_t map.\n";
         return 1;
     }
-
+    cond.writeRoofile("conditional_prob.root");  
     double Enu = 0.82;
     double dt = cond.sample(Enu);
 

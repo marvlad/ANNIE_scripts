@@ -14,7 +14,7 @@ $(TARGET): $(SRC)
 	$(CXX) $(CXXFLAGS) $(SRC) -o $(TARGET) $(LDFLAGS) $(INC)
 
 clean:
-	rm -f $(TARGET)
+	rm -f $(TARGET) *.pdf *.root
 
 .PHONY: all clean
 

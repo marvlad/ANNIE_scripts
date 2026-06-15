@@ -6,114 +6,143 @@ import numpy as np
 # ── Load ──────────────────────────────────────────────────────────────────────
 df = pd.read_csv("lappd_metadata.csv")
 
-boards  = sorted(df["board_id"].unique())
-entries = sorted(df["global_entry"].unique())
-colors  = ["tab:blue", "tab:orange", "tab:green", "tab:red", "tab:purple"]
-markers = ["o", "s"]          # board 0 = circle, board 1 = square
-PSEC    = list(range(5))
+lappd_ids = sorted(df["lappd_id"].unique())
+boards     = sorted(df["board_id"].unique())
+PSEC       = list(range(5))
 
-def board_df(df, bid):
-    return df[df["board_id"] == bid].sort_values("global_entry")
+# Color scheme: one color per LAPPD, marker per board
+lappd_colors  = ["tab:blue", "tab:orange", "tab:green", "tab:red"]
+board_markers = ["o", "s"]   # board 0 = circle, board 1 = square
+chip_colors   = ["tab:blue", "tab:orange", "tab:green", "tab:red", "tab:purple"]
 
-# ── Helper ────────────────────────────────────────────────────────────────────
+def lappd_df(df, lid):
+    return df[df["lappd_id"] == lid].sort_values("global_entry")
+
+def lappd_board_df(df, lid, bid):
+    return df[(df["lappd_id"] == lid) & (df["board_id"] == bid)].sort_values("global_entry")
+
 def savefig(fig, name):
     fig.savefig(name, dpi=150, bbox_inches="tight")
     print(f"  saved → {name}")
 
 # ══════════════════════════════════════════════════════════════════════════════
-# 1. TIMESTAMPS
+# 1. TIMESTAMPS  — one subplot per LAPPD
 # ══════════════════════════════════════════════════════════════════════════════
 print("Plotting timestamps …")
-fig, axes = plt.subplots(2, 2, figsize=(14, 8))
+fig, axes = plt.subplots(len(lappd_ids), 2,
+                         figsize=(14, 5 * len(lappd_ids)))
+if len(lappd_ids) == 1:
+    axes = [axes]   # ensure 2-D indexing works
 fig.suptitle("Timestamps per Event", fontsize=14, fontweight="bold")
 
-for bid, (ax_bg, ax_ts) in zip(boards, [(axes[0,0], axes[0,1]),
-                                          (axes[1,0], axes[1,1])]):
-    d = board_df(df, bid)
-    ax_bg.plot(d["global_entry"], d["beamgate_ns"] / 1e9, marker=markers[bid],
-               color=colors[bid], label=f"Board {bid}")
-    ax_bg.set_title(f"Beamgate timestamp — Board {bid}")
-    ax_bg.set_xlabel("Entry"); ax_bg.set_ylabel("Beamgate [s]")
-    ax_bg.grid(True, alpha=0.3)
+for row, lid in enumerate(lappd_ids):
+    col = lappd_colors[row % len(lappd_colors)]
+    for bid in boards:
+        d = lappd_board_df(df, lid, bid)
+        if d.empty: continue
+        mk = board_markers[bid % len(board_markers)]
+        lbl = f"Bd{bid}"
+        axes[row][0].plot(d["global_entry"], d["beamgate_ns"] / 1e9,
+                          marker=mk, color=col, alpha=0.7, label=lbl)
+        axes[row][1].plot(d["global_entry"], d["timestamp_ns"] / 1e9,
+                          marker=mk, color=col, alpha=0.7, label=lbl)
 
-    ax_ts.plot(d["global_entry"], d["timestamp_ns"] / 1e9, marker=markers[bid],
-               color=colors[bid], label=f"Board {bid}")
-    ax_ts.set_title(f"LAPPD timestamp — Board {bid}")
-    ax_ts.set_xlabel("Entry"); ax_ts.set_ylabel("Timestamp [s]")
-    ax_ts.grid(True, alpha=0.3)
+    axes[row][0].set_title(f"Beamgate — LAPPD {lid}")
+    axes[row][0].set_xlabel("Global entry"); axes[row][0].set_ylabel("Time [s]")
+    axes[row][0].legend(fontsize=8); axes[row][0].grid(True, alpha=0.3)
+
+    axes[row][1].set_title(f"Timestamp — LAPPD {lid}")
+    axes[row][1].set_xlabel("Global entry"); axes[row][1].set_ylabel("Time [s]")
+    axes[row][1].legend(fontsize=8); axes[row][1].grid(True, alpha=0.3)
 
 plt.tight_layout()
 savefig(fig, "plot_timestamps.png")
 plt.close()
 
-# ── timestamp diff between boards ────────────────────────────────────────────
-fig, axes = plt.subplots(1, 2, figsize=(12, 4))
-fig.suptitle("Timestamp difference Board 0 − Board 1", fontweight="bold")
+# ── timestamp diff between boards (per LAPPD) ────────────────────────────────
+if len(boards) >= 2:
+    fig, axes = plt.subplots(len(lappd_ids), 2,
+                             figsize=(12, 4 * len(lappd_ids)))
+    if len(lappd_ids) == 1: axes = [axes]
+    fig.suptitle("Timestamp difference Board 0 − Board 1", fontweight="bold")
 
-d0 = board_df(df, 0).set_index("global_entry")
-d1 = board_df(df, 1).set_index("global_entry")
-common = d0.index.intersection(d1.index)
+    for row, lid in enumerate(lappd_ids):
+        d0 = lappd_board_df(df, lid, 0).set_index("global_entry")
+        d1 = lappd_board_df(df, lid, 1).set_index("global_entry")
+        common = d0.index.intersection(d1.index)
+        if len(common) == 0:
+            axes[row][0].set_title(f"LAPPD {lid} — no common entries")
+            continue
+        bg_diff = d0.loc[common, "beamgate_ns"]  - d1.loc[common, "beamgate_ns"]
+        ts_diff = d0.loc[common, "timestamp_ns"] - d1.loc[common, "timestamp_ns"]
 
-bg_diff = (d0.loc[common, "beamgate_ns"] - d1.loc[common, "beamgate_ns"])
-ts_diff = (d0.loc[common, "timestamp_ns"] - d1.loc[common, "timestamp_ns"])
+        col = lappd_colors[row % len(lappd_colors)]
+        axes[row][0].bar(common, bg_diff, color=col, alpha=0.8)
+        axes[row][0].set_title(f"Beamgate diff [ns] — LAPPD {lid}")
+        axes[row][0].set_xlabel("Global entry"); axes[row][0].set_ylabel("Δ [ns]")
+        axes[row][0].grid(True, alpha=0.3)
 
-axes[0].bar(common, bg_diff, color="steelblue")
-axes[0].set_title("Beamgate diff [ns]")
-axes[0].set_xlabel("Entry"); axes[0].set_ylabel("Δ [ns]")
-axes[0].grid(True, alpha=0.3)
+        axes[row][1].bar(common, ts_diff, color=col, alpha=0.8)
+        axes[row][1].set_title(f"Timestamp diff [ns] — LAPPD {lid}")
+        axes[row][1].set_xlabel("Global entry"); axes[row][1].set_ylabel("Δ [ns]")
+        axes[row][1].grid(True, alpha=0.3)
 
-axes[1].bar(common, ts_diff, color="darkorange")
-axes[1].set_title("Timestamp diff [ns]")
-axes[1].set_xlabel("Entry"); axes[1].set_ylabel("Δ [ns]")
-axes[1].grid(True, alpha=0.3)
-
-plt.tight_layout()
-savefig(fig, "plot_timestamp_diff.png")
-plt.close()
+    plt.tight_layout()
+    savefig(fig, "plot_timestamp_diff.png")
+    plt.close()
 
 # ══════════════════════════════════════════════════════════════════════════════
 # 2. CLOCK CYCLE
 # ══════════════════════════════════════════════════════════════════════════════
 print("Plotting clock cycle …")
-fig, axes = plt.subplots(1, 2, figsize=(12, 4)) 
+ncols = len(boards)
+fig, axes = plt.subplots(len(lappd_ids), ncols,
+                         figsize=(6 * ncols, 4 * len(lappd_ids)))
+if len(lappd_ids) == 1: axes = [axes]
 fig.suptitle("Clock Cycle (0–7) per Event", fontweight="bold")
 
-for bid, ax in zip(boards, axes):
-    d = board_df(df, bid)
-    ax.bar(d["global_entry"], d["clockcycle"], color=colors[bid], alpha=0.8)
-    ax.set_title(f"Board {bid}")
-    ax.set_xlabel("Entry"); ax.set_ylabel("Clock cycle")
-    ax.set_ylim(0, 7.5)
-    ax.grid(True, alpha=0.3)
+for row, lid in enumerate(lappd_ids):
+    col = lappd_colors[row % len(lappd_colors)]
+    for bid in boards:
+        d = lappd_board_df(df, lid, bid)
+        ax = axes[row][bid] if ncols > 1 else axes[row]
+        if not d.empty:
+            ax.bar(d["global_entry"], d["clockcycle"], color=col, alpha=0.8)
+        ax.set_title(f"LAPPD {lid} — Board {bid}")
+        ax.set_xlabel("Global entry"); ax.set_ylabel("Clock cycle")
+        ax.set_ylim(0, 7.5); ax.grid(True, alpha=0.3)
 
 plt.tight_layout()
 savefig(fig, "plot_clockcycle.png")
 plt.close()
 
 # ══════════════════════════════════════════════════════════════════════════════
-# 3. WILKINSON COUNTS (current vs target) — all chips, both boards
+# 3. WILKINSON COUNTS
 # ══════════════════════════════════════════════════════════════════════════════
 print("Plotting Wilkinson counts …")
-fig, axes = plt.subplots(len(boards), len(PSEC), figsize=(18, 6), 
-                         sharex=True)
-fig.suptitle("Wilkinson Feedback Count  (current vs target)", fontweight="bold")
+fig, axes = plt.subplots(len(lappd_ids) * len(boards), len(PSEC),
+                         figsize=(18, 4 * len(lappd_ids) * len(boards)),
+                         sharex=False)
+if axes.ndim == 1: axes = axes.reshape(1, -1)
+fig.suptitle("Wilkinson Feedback Count (current vs target)", fontweight="bold")
 
-for row, bid in enumerate(boards):
-    d = board_df(df, bid)
-    for chip in PSEC:
-        ax = axes[row, chip]
-        cur = f"psec{chip}_wilkinson_current"
-        tgt = f"psec{chip}_wilkinson_target"
-        ax.plot(d["global_entry"], d[cur], marker="o", ms=5,
-                color=colors[chip], label="current")
-        ax.axhline(d[tgt].iloc[0], color="black", ls="--",
-                   lw=1, label="target")
-        ax.set_title(f"Bd{bid} PSEC{chip}", fontsize=9)
-        ax.grid(True, alpha=0.3)
-        if chip == 0:
-            ax.set_ylabel(f"Board {bid}\nADC counts")
-        if row == len(boards)-1:
-            ax.set_xlabel("Entry")
+row = 0
+for lid in lappd_ids:
+    col = lappd_colors[lappd_ids.index(lid) % len(lappd_colors)]
+    for bid in boards:
+        d = lappd_board_df(df, lid, bid)
+        for chip in PSEC:
+            ax = axes[row, chip]
+            if not d.empty:
+                ax.plot(d["global_entry"], d[f"psec{chip}_wilkinson_current"],
+                        marker="o", ms=4, color=col, label="current")
+                ax.axhline(d[f"psec{chip}_wilkinson_target"].iloc[0],
+                           color="black", ls="--", lw=1, label="target")
+            ax.set_title(f"L{lid} Bd{bid} P{chip}", fontsize=8)
+            ax.grid(True, alpha=0.3)
+            if chip == 0: ax.set_ylabel(f"L{lid} Bd{bid}", fontsize=8)
+            if row == axes.shape[0]-1: ax.set_xlabel("Entry", fontsize=8)
+        row += 1
 
 handles = [plt.Line2D([0],[0], color="gray",  marker="o", label="current"),
            plt.Line2D([0],[0], color="black", ls="--",    label="target")]
@@ -123,7 +152,7 @@ savefig(fig, "plot_wilkinson.png")
 plt.close()
 
 # ══════════════════════════════════════════════════════════════════════════════
-# 4. VBIAS / PEDESTAL
+# 4. VBIAS
 # ══════════════════════════════════════════════════════════════════════════════
 print("Plotting Vbias …")
 fig, axes = plt.subplots(1, len(PSEC), figsize=(16, 4), sharey=True)
@@ -131,17 +160,21 @@ fig.suptitle("Vbias (Pedestal) Setting per PSEC chip", fontweight="bold")
 
 for chip in PSEC:
     ax = axes[chip]
-    for bid in boards:
-        d = board_df(df, bid)
-        ax.plot(d["global_entry"], d[f"psec{chip}_vbias"],
-                marker=markers[bid], color=colors[bid],
-                label=f"Board {bid}", alpha=0.8)
+    for lid in lappd_ids:
+        col = lappd_colors[lappd_ids.index(lid) % len(lappd_colors)]
+        for bid in boards:
+            d = lappd_board_df(df, lid, bid)
+            if d.empty: continue
+            mk = board_markers[bid % len(board_markers)]
+            ax.plot(d["global_entry"], d[f"psec{chip}_vbias"],
+                    marker=mk, color=col, alpha=0.8,
+                    label=f"L{lid} Bd{bid}")
     ax.set_title(f"PSEC {chip}")
-    ax.set_xlabel("Entry")
+    ax.set_xlabel("Global entry")
     if chip == 0: ax.set_ylabel("Vbias [ADC counts]")
     ax.grid(True, alpha=0.3)
 
-axes[-1].legend(fontsize=8)
+axes[-1].legend(fontsize=7)
 plt.tight_layout()
 savefig(fig, "plot_vbias.png")
 plt.close()
@@ -155,17 +188,21 @@ fig.suptitle("Self-Trigger Threshold per PSEC chip", fontweight="bold")
 
 for chip in PSEC:
     ax = axes[chip]
-    for bid in boards:
-        d = board_df(df, bid)
-        ax.plot(d["global_entry"], d[f"psec{chip}_selftrig_threshold"],
-                marker=markers[bid], color=colors[bid],
-                label=f"Board {bid}", alpha=0.8)
+    for lid in lappd_ids:
+        col = lappd_colors[lappd_ids.index(lid) % len(lappd_colors)]
+        for bid in boards:
+            d = lappd_board_df(df, lid, bid)
+            if d.empty: continue
+            mk = board_markers[bid % len(board_markers)]
+            ax.plot(d["global_entry"], d[f"psec{chip}_selftrig_threshold"],
+                    marker=mk, color=col, alpha=0.8,
+                    label=f"L{lid} Bd{bid}")
     ax.set_title(f"PSEC {chip}")
-    ax.set_xlabel("Entry")
+    ax.set_xlabel("Global entry")
     if chip == 0: ax.set_ylabel("Threshold [ADC counts]")
     ax.grid(True, alpha=0.3)
 
-axes[-1].legend(fontsize=8)
+axes[-1].legend(fontsize=7)
 plt.tight_layout()
 savefig(fig, "plot_selftrig_threshold.png")
 plt.close()
@@ -174,119 +211,155 @@ plt.close()
 # 6. VCDL COUNTS
 # ══════════════════════════════════════════════════════════════════════════════
 print("Plotting VCDL counts …")
-fig, axes = plt.subplots(1, len(PSEC), figsize=(16, 4)) 
+fig, axes = plt.subplots(1, len(PSEC), figsize=(16, 4))
 fig.suptitle("VCDL Count per PSEC chip", fontweight="bold")
 
 for chip in PSEC:
     ax = axes[chip]
-    for bid in boards:
-        d = board_df(df, bid)
-        ax.plot(d["global_entry"], d[f"psec{chip}_vcdl_count"],
-                marker=markers[bid], color=colors[bid],
-                label=f"Board {bid}", alpha=0.8)
+    for lid in lappd_ids:
+        col = lappd_colors[lappd_ids.index(lid) % len(lappd_colors)]
+        for bid in boards:
+            d = lappd_board_df(df, lid, bid)
+            if d.empty: continue
+            mk = board_markers[bid % len(board_markers)]
+            ax.plot(d["global_entry"], d[f"psec{chip}_vcdl_count"],
+                    marker=mk, color=col, alpha=0.8,
+                    label=f"L{lid} Bd{bid}")
     ax.set_title(f"PSEC {chip}")
-    ax.set_xlabel("Entry")
+    ax.set_xlabel("Global entry")
     if chip == 0: ax.set_ylabel("VCDL count")
     ax.grid(True, alpha=0.3)
 
-axes[-1].legend(fontsize=8)
+axes[-1].legend(fontsize=7)
 plt.tight_layout()
 savefig(fig, "plot_vcdl.png")
 plt.close()
 
 # ══════════════════════════════════════════════════════════════════════════════
-# 7. SELF-TRIGGER RATE COUNTS  per channel (6 ch × 5 chips × 2 boards)
+# 7. SELF-TRIGGER RATE COUNTS — one figure per LAPPD per board
 # ══════════════════════════════════════════════════════════════════════════════
 print("Plotting self-trigger rate counts …")
-for bid in boards:
-    d = board_df(df, bid)
-    fig, axes = plt.subplots(5, 6, figsize=(18, 12), sharex=True, sharey=True)
-    fig.suptitle(f"Self-Trigger Rate Counts — Board {bid}  (PSEC × channel)",
-                 fontsize=13, fontweight="bold")
-
-    for chip in PSEC:
-        for ch in range(6):
-            ax = axes[chip, ch] 
-            col = f"psec{chip}_ch{ch}_trig_rate"
-            ax.plot(d["global_entry"], d[col], marker="o", ms=4,
-                    color=colors[chip])
-            ax.set_title(f"P{chip}-ch{ch}", fontsize=8)
-            ax.grid(True, alpha=0.3)
-            if ch == 0:   ax.set_ylabel(f"PSEC{chip}", fontsize=8)
-            if chip == 4: ax.set_xlabel("Entry", fontsize=8)
-
-    plt.tight_layout()
-    savefig(fig, f"plot_trigrate_board{bid}.png")
-    plt.close()
+for lid in lappd_ids:
+    col = lappd_colors[lappd_ids.index(lid) % len(lappd_colors)]
+    for bid in boards:
+        d = lappd_board_df(df, lid, bid)
+        if d.empty:
+            print(f"  Skipping LAPPD {lid} Board {bid} — no data")
+            continue
+        fig, axes = plt.subplots(5, 6, figsize=(18, 12),
+                                 sharex=True, sharey=True)
+        fig.suptitle(f"Self-Trigger Rate Counts — LAPPD {lid}  Board {bid}",
+                     fontsize=13, fontweight="bold")
+        for chip in PSEC:
+            for ch in range(6):
+                ax = axes[chip, ch]
+                ax.plot(d["global_entry"], d[f"psec{chip}_ch{ch}_trig_rate"],
+                        marker="o", ms=4, color=chip_colors[chip])
+                ax.set_title(f"P{chip}-ch{ch}", fontsize=8)
+                ax.grid(True, alpha=0.3)
+                if ch == 0:   ax.set_ylabel(f"PSEC{chip}", fontsize=8)
+                if chip == 4: ax.set_xlabel("Entry", fontsize=8)
+        plt.tight_layout()
+        savefig(fig, f"plot_trigrate_lappd{lid}_board{bid}.png")
+        plt.close()
 
 # ══════════════════════════════════════════════════════════════════════════════
-# 8. SUMMARY DASHBOARD  (one page overview)
+# 8. SUMMARY DASHBOARD
 # ══════════════════════════════════════════════════════════════════════════════
 print("Plotting summary dashboard …")
-fig = plt.figure(figsize=(18, 10))
+fig = plt.figure(figsize=(20, 12))
 fig.suptitle("LAPPD Metadata Summary Dashboard", fontsize=15, fontweight="bold")
-gs = gridspec.GridSpec(3, 4, figure=fig, hspace=0.45, wspace=0.35)
+gs = gridspec.GridSpec(4, 4, figure=fig, hspace=0.5, wspace=0.35)
 
-# Row 0: timestamps (both boards overlaid)
+# Row 0: timestamps all LAPPDs overlaid
 ax_bg = fig.add_subplot(gs[0, :2])
 ax_ts = fig.add_subplot(gs[0, 2:])
-for bid in boards:
-    d = board_df(df, bid)
-    ax_bg.plot(d["global_entry"], d["beamgate_ns"]/1e9,
-               marker=markers[bid], color=colors[bid], label=f"Bd{bid}")
-    ax_ts.plot(d["global_entry"], d["timestamp_ns"]/1e9,
-               marker=markers[bid], color=colors[bid], label=f"Bd{bid}")
-ax_bg.set_title("Beamgate [s]"); ax_bg.legend(fontsize=8); ax_bg.grid(True, alpha=0.3)
-ax_ts.set_title("Timestamp [s]"); ax_ts.legend(fontsize=8); ax_ts.grid(True, alpha=0.3)
+for lid in lappd_ids:
+    col = lappd_colors[lappd_ids.index(lid) % len(lappd_colors)]
+    for bid in boards:
+        d = lappd_board_df(df, lid, bid)
+        if d.empty: continue
+        mk = board_markers[bid % len(board_markers)]
+        ax_bg.plot(d["global_entry"], d["beamgate_ns"]/1e9,
+                   marker=mk, color=col, alpha=0.7, label=f"L{lid} Bd{bid}")
+        ax_ts.plot(d["global_entry"], d["timestamp_ns"]/1e9,
+                   marker=mk, color=col, alpha=0.7, label=f"L{lid} Bd{bid}")
+ax_bg.set_title("Beamgate [s]"); ax_bg.legend(fontsize=7, ncol=2)
+ax_bg.grid(True, alpha=0.3); ax_bg.set_xlabel("Global entry")
+ax_ts.set_title("Timestamp [s]"); ax_ts.legend(fontsize=7, ncol=2)
+ax_ts.grid(True, alpha=0.3); ax_ts.set_xlabel("Global entry")
 
-# Row 1: Wilkinson current (per chip, board 0 only for clarity)
-ax_wlk = fig.add_subplot(gs[1, :2])
-d0 = board_df(df, 0)
-for chip in PSEC:
-    ax_wlk.plot(d0["global_entry"], d0[f"psec{chip}_wilkinson_current"],
-                marker="o", ms=4, color=colors[chip], label=f"PSEC{chip}")
-ax_wlk.set_title("Wilkinson current — Board 0")
-ax_wlk.legend(fontsize=7, ncol=5); ax_wlk.grid(True, alpha=0.3)
+# Row 1: Wilkinson current per LAPPD (board 0, all chips)
+for lidx, lid in enumerate(lappd_ids[:2]):   # max 2 LAPPDs in row
+    col = lappd_colors[lidx % len(lappd_colors)]
+    ax = fig.add_subplot(gs[1, lidx*2:(lidx+1)*2])
+    d = lappd_board_df(df, lid, 0)
+    if not d.empty:
+        for chip in PSEC:
+            ax.plot(d["global_entry"], d[f"psec{chip}_wilkinson_current"],
+                    marker="o", ms=3, color=chip_colors[chip], label=f"P{chip}")
+    ax.set_title(f"Wilkinson current — LAPPD {lid} Bd0")
+    ax.legend(fontsize=7, ncol=5); ax.grid(True, alpha=0.3)
+    ax.set_xlabel("Global entry")
 
-# Row 1: VCDL (per chip, board 0)
-ax_vcdl = fig.add_subplot(gs[1, 2:])
-for chip in PSEC:
-    ax_vcdl.plot(d0["global_entry"], d0[f"psec{chip}_vcdl_count"],
-                 marker="o", ms=4, color=colors[chip], label=f"PSEC{chip}")
-ax_vcdl.set_title("VCDL count — Board 0")
-ax_vcdl.legend(fontsize=7, ncol=5); ax_vcdl.grid(True, alpha=0.3)
+# Row 2: VCDL per LAPPD (board 0, all chips)
+for lidx, lid in enumerate(lappd_ids[:2]):
+    col = lappd_colors[lidx % len(lappd_colors)]
+    ax = fig.add_subplot(gs[2, lidx*2:(lidx+1)*2])
+    d = lappd_board_df(df, lid, 0)
+    if not d.empty:
+        for chip in PSEC:
+            ax.plot(d["global_entry"], d[f"psec{chip}_vcdl_count"],
+                    marker="o", ms=3, color=chip_colors[chip], label=f"P{chip}")
+    ax.set_title(f"VCDL count — LAPPD {lid} Bd0")
+    ax.legend(fontsize=7, ncol=5); ax.grid(True, alpha=0.3)
+    ax.set_xlabel("Global entry")
 
-# Row 2: clock cycle both boards
-ax_cc0 = fig.add_subplot(gs[2, 0]) 
-ax_cc1 = fig.add_subplot(gs[2, 1]) 
-for bid, ax in zip(boards, [ax_cc0, ax_cc1]):
-    d = board_df(df, bid)
-    ax.bar(d["global_entry"], d["clockcycle"], color=colors[bid], alpha=0.8)
-    ax.set_title(f"Clock cycle Bd{bid}"); ax.set_ylim(0,8); ax.grid(True,alpha=0.3)
+# Row 3: clock cycle + vbias + combined trig rate
+ax_cc = fig.add_subplot(gs[3, :2])
+for lid in lappd_ids:
+    col = lappd_colors[lappd_ids.index(lid) % len(lappd_colors)]
+    for bid in boards:
+        d = lappd_board_df(df, lid, bid)
+        if d.empty: continue
+        mk = board_markers[bid % len(board_markers)]
+        ax_cc.scatter(d["global_entry"], d["clockcycle"],
+                      color=col, marker=mk, alpha=0.7, s=20,
+                      label=f"L{lid} Bd{bid}")
+ax_cc.set_title("Clock cycle (0–7)"); ax_cc.set_ylim(0, 8)
+ax_cc.legend(fontsize=7, ncol=2); ax_cc.grid(True, alpha=0.3)
+ax_cc.set_xlabel("Global entry")
 
-# Row 2: vbias all chips board 0
-ax_vb = fig.add_subplot(gs[2, 2]) 
-for chip in PSEC:
-    ax_vb.plot(d0["global_entry"], d0[f"psec{chip}_vbias"],
-               marker="o", ms=4, color=colors[chip], label=f"P{chip}")
-ax_vb.set_title("Vbias — Board 0"); ax_vb.legend(fontsize=7); ax_vb.grid(True,alpha=0.3)
-
-# Row 2: combined trig rate
-ax_ctr = fig.add_subplot(gs[2, 3]) 
-for bid in boards:
-    d = board_df(df, bid)
-    ax_ctr.plot(d["global_entry"], d["combined_trig_rate"],
-                marker=markers[bid], color=colors[bid], label=f"Bd{bid}")
-ax_ctr.set_title("Combined trig rate"); ax_ctr.legend(fontsize=8); ax_ctr.grid(True,alpha=0.3)
+ax_ctr = fig.add_subplot(gs[3, 2:])
+for lid in lappd_ids:
+    col = lappd_colors[lappd_ids.index(lid) % len(lappd_colors)]
+    for bid in boards:
+        d = lappd_board_df(df, lid, bid)
+        if d.empty: continue
+        mk = board_markers[bid % len(board_markers)]
+        ax_ctr.plot(d["global_entry"], d["combined_trig_rate"],
+                    marker=mk, color=col, alpha=0.7, label=f"L{lid} Bd{bid}")
+ax_ctr.set_title("Combined trigger rate")
+ax_ctr.legend(fontsize=7, ncol=2); ax_ctr.grid(True, alpha=0.3)
+ax_ctr.set_xlabel("Global entry")
 
 savefig(fig, "plot_dashboard.png")
 plt.close()
 
+# ── Print summary ─────────────────────────────────────────────────────────────
 print("\nAll done! Files written:")
-for f in ["plot_timestamps.png", "plot_timestamp_diff.png",
-          "plot_clockcycle.png", "plot_wilkinson.png",
-          "plot_vbias.png", "plot_selftrig_threshold.png",
-          "plot_vcdl.png", "plot_trigrate_board0.png",
-          "plot_trigrate_board1.png", "plot_dashboard.png"]:
+files = ["plot_timestamps.png", "plot_timestamp_diff.png",
+         "plot_clockcycle.png", "plot_wilkinson.png",
+         "plot_vbias.png", "plot_selftrig_threshold.png",
+         "plot_vcdl.png", "plot_dashboard.png"]
+for lid in lappd_ids:
+    for bid in boards:
+        files.append(f"plot_trigrate_lappd{lid}_board{bid}.png")
+for f in files:
     print(f"  {f}")
-:set nonu     
+
+print(f"\nLAPPD IDs found in CSV: {lappd_ids}")
+print(f"Board IDs found in CSV: {boards}")
+for lid in lappd_ids:
+    n = len(lappd_df(df, lid))
+    print(f"  LAPPD {lid}: {n} rows in CSV")

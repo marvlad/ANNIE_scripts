@@ -3,6 +3,7 @@
 #include <sstream>
 #include <string>
 #include <vector>
+#include <map>
 #include <bitset>
 #include "PsecData.h"
 #include "BoostStore.h"
@@ -12,7 +13,7 @@
 // CSV HEADER
 // ══════════════════════════════════════════════════════════════════════════════
 void WriteCSVHeader(std::ofstream& csv) {
-    csv << "global_entry,file_entry,filename,board_id,";
+    csv << "global_entry,file_entry,filename,lappd_key,lappd_id,board_id,";
     for (int chip = 0; chip < 5; chip++) {
         std::string c = "psec" + std::to_string(chip) + "_";
         csv << c << "wilkinson_current,"
@@ -25,7 +26,7 @@ void WriteCSVHeader(std::ofstream& csv) {
             << c << "vcdl_count,";
         for (int ch = 0; ch < 6; ch++)
             csv << c << "ch" << ch << "_trig_rate,";
-    }   
+    }
     csv << "beamgate_raw,beamgate_ns,"
         << "timestamp_raw,timestamp_ns,"
         << "clockcycle,"
@@ -39,22 +40,26 @@ void WriteCSVHeader(std::ofstream& csv) {
 void WriteCSVRow(std::ofstream& csv,
                  int entry, int globalEntry,
                  const std::string& filepath,
+                 const std::string& lappdKey,
+                 unsigned int lappdID,
                  const std::vector<unsigned short>& meta)
 {
     if (meta.size() < 103) {
         std::cout << "  WARNING: meta too small (" << meta.size()
                   << "), skipping row." << std::endl;
         return;
-    }   
+    }
 
     // Extract filename from full path
-    std::string fname = filepath.substr(filepath.find_last_of("/\\") + 1); 
+    std::string fname = filepath.substr(filepath.find_last_of("/\\") + 1);
 
-    // ── Identity ─────────────────────────────────────────────────────────
-    csv << globalEntry << "," 
-        << entry       << "," 
-        << fname       << "," 
-        << meta[0]     << ",";   // board ID
+    // ── Identity ──────────────────────────────────────────────────────────
+    csv << globalEntry << ","
+        << entry       << ","
+        << fname       << ","
+        << lappdKey    << ","
+        << lappdID     << ","
+        << meta[0]     << ",";  // board ID
 
     // ── Per-chip fields ───────────────────────────────────────────────────
     // Layout in meta per chip (20 words each, starting at offset 1):
@@ -74,7 +79,7 @@ void WriteCSVRow(std::ofstream& csv,
     //   o+13 dllvdd
     //   o+14..o+19  6 self-trig rate counts (one per channel)
     for (int chip = 0; chip < 5; chip++) {
-        int o = 1 + chip * 20; 
+        int o = 1 + chip * 20;
 
         unsigned int vcdl = ((unsigned int)meta[o + 12] << 16) | meta[o + 11];
 
@@ -89,46 +94,44 @@ void WriteCSVRow(std::ofstream& csv,
 
         for (int ch = 0; ch < 6; ch++)
             csv << meta[o + 14 + ch] << ",";
-    }   
+    }
 
-    // ── Reconstruct 64-bit beamgate from 4 slices ─────────────────────────
-    // Slices live at meta indices: 7, 27, 47, 67
-    // (= o+6 for chip 0,1,2,3 = 1+0*20+6, 1+1*20+6, 1+2*20+6, 1+3*20+6)
+    // ── Reconstruct 64-bit beamgate from 4 slices ────────────────────────
+    // Slices at meta indices: 7, 27, 47, 67
     unsigned long beamgate_raw =
         ((unsigned long)meta[7]  << 48) |
         ((unsigned long)meta[27] << 32) |
         ((unsigned long)meta[47] << 16) |
         ((unsigned long)meta[67]);
 
-    // ── Reconstruct 64-bit timestamp from 4 slices ────────────────────────
-    // Slices live at meta indices: 70, 50, 30, 10
-    // (= o+9 for chip 3,2,1,0 — note reversed bit order per firmware spec)
+    // ── Reconstruct 64-bit timestamp from 4 slices ───────────────────────
+    // Slices at meta indices: 70, 50, 30, 10 (note reversed bit order)
     unsigned long timestamp_raw =
         ((unsigned long)meta[70] << 48) |
         ((unsigned long)meta[50] << 32) |
         ((unsigned long)meta[30] << 16) |
         ((unsigned long)meta[10]);
 
-    // ── Clock cycle: last 3 bits of timestamp[15:0] (meta[10]) ───────────
+    // ── Clock cycle: last 3 bits of timestamp[15:0] (meta[10]) ──────────
     int clockcycle = meta[10] & 0x7;
 
-    // ── Convert to nanoseconds (integer arithmetic avoids precision loss) ──
-    // Clock runs at 320 MHz → 1 tick = 25/8 ns
-    // ns = (raw / 8) * 25 + (raw % 8) * 3   [integer approx, same as SaveTimeStamps]
-    unsigned long bg_trunc  = beamgate_raw  % 8;
-    unsigned long bg_ns     = (beamgate_raw  - bg_trunc)  / 8 * 25 + bg_trunc  * 3;
+    // ── Convert to nanoseconds ────────────────────────────────────────────
+    // Clock at 320 MHz → 1 tick = 25/8 ns
+    // ns = (raw / 8) * 25 + (raw % 8) * 3
+    unsigned long bg_trunc = beamgate_raw  % 8;
+    unsigned long bg_ns    = (beamgate_raw  - bg_trunc) / 8 * 25 + bg_trunc * 3;
 
-    unsigned long ts_trunc  = timestamp_raw % 8;
-    unsigned long ts_ns     = (timestamp_raw - ts_trunc) / 8 * 25 + ts_trunc * 3;
+    unsigned long ts_trunc = timestamp_raw % 8;
+    unsigned long ts_ns    = (timestamp_raw - ts_trunc) / 8 * 25 + ts_trunc * 3;
 
     // ── Combined trigger rate (meta[101]) ─────────────────────────────────
     unsigned short combined_trig = meta[101];
 
-    csv << beamgate_raw  << "," 
-        << bg_ns         << "," 
-        << timestamp_raw << "," 
-        << ts_ns         << "," 
-        << clockcycle    << "," 
+    csv << beamgate_raw  << ","
+        << bg_ns         << ","
+        << timestamp_raw << ","
+        << ts_ns         << ","
+        << clockcycle    << ","
         << combined_trig
         << "\n";
 }
@@ -146,7 +149,7 @@ int main(int argc, char* argv[]) {
     if (!fin.is_open()) {
         std::cerr << "ERROR: cannot open input file: " << inputFile << std::endl;
         return 1;
-    }   
+    }
 
     std::vector<std::string> filePaths;
     std::string line;
@@ -154,38 +157,52 @@ int main(int argc, char* argv[]) {
         // skip empty lines and comment lines starting with #
         if (!line.empty() && line[0] != '#')
             filePaths.push_back(line);
-    }   
+    }
     fin.close();
 
     if (filePaths.empty()) {
         std::cerr << "ERROR: no file paths found in " << inputFile << std::endl;
         return 1;
-    }   
+    }
 
     std::cout << "Found " << filePaths.size()
               << " file(s) to process." << std::endl;
 
-    // ── Open CSV (written once across all files) ──────────────────────────
+    // ── LAPPD keys to try ─────────────────────────────────────────────────
+    std::vector<std::string> lappdKeys = {
+        "LAPPDData"
+    };
+
+    // ── Open CSV ──────────────────────────────────────────────────────────
     std::ofstream csv("lappd_metadata.csv");
     if (!csv.is_open()) {
         std::cerr << "ERROR: cannot open lappd_metadata.csv for writing" << std::endl;
         return 1;
-    }   
+    }
     WriteCSVHeader(csv);
 
-    verbosity    = 0;   // suppress lappd_helper internal prints
-    int globalEntry   = 0;   // data-event counter across all files
-    int totalSkipped  = 0;   // PPS frames skipped
-    int totalFailed   = 0;   // meta parse failures
+    verbosity        = 0;
+    int globalEntry  = 0;
+    int totalSkipped = 0;
+    int totalFailed  = 0;
+
+    // Track which LAPPD keys were found
+    std::map<std::string, int> lappdKeysFound;
+    for (const std::string& key : lappdKeys)
+        lappdKeysFound[key] = 0;
+
+    // Track data frames per LAPPD_ID
+    std::map<unsigned int, int> lappdIDDataFrames;
+    std::map<unsigned int, int> lappdIDPPSFrames;
 
     // ── Loop over files ───────────────────────────────────────────────────
     for (const std::string& path : filePaths) {
         std::cout << "\n=== Processing: " << path << " ===" << std::endl;
 
-        BoostStore* RawData = new BoostStore(false, 0); 
+        BoostStore* RawData = new BoostStore(false, 0);
         RawData->Initialise(path);
 
-        BoostStore* LAPPDData = new BoostStore(false, 2); 
+        BoostStore* LAPPDData = new BoostStore(false, 2);
         RawData->Get("LAPPDData", *LAPPDData);
 
         int lappdtotalentries = 0;
@@ -199,72 +216,129 @@ int main(int argc, char* argv[]) {
         for (int entry = 0; entry < lappdtotalentries; entry++) {
             LAPPDData->GetEntry(entry);
 
-            PsecData* Ldata = new PsecData;
-            LAPPDData->Get("LAPPDData", *Ldata);
+            bool anyDataFound = false;
 
-            std::vector<unsigned short>& Raw_Buffer    = Ldata->RawWaveform;
-            std::vector<int>&            BoardId_Buffer = Ldata->BoardIndex;
+            // ── Try each LAPPD key ────────────────────────────────────────
+            for (const std::string& key : lappdKeys) {
 
-            // Skip entries with empty buffers
-            if (Raw_Buffer.empty() || BoardId_Buffer.empty()) {
-                delete Ldata;
-                continue;
-            }   
+                PsecData* Ldata = new PsecData;
+                bool success = LAPPDData->Get(key, *Ldata);
 
-            int frametype = (int)(Raw_Buffer.size() / BoardId_Buffer.size());
-
-            // Skip PPS frames
-            if (frametype != NUM_VECTOR_DATA) {
-                filePPSEvents++;
-                totalSkipped++;
-                delete Ldata;
-                continue;
-            }   
-
-            // ── Loop over boards ──────────────────────────────────────────
-            int nbi = (int)BoardId_Buffer.size();
-            for (int bi = 0; bi < nbi; bi++) {
-                meta.clear();
-                Parse_Buffer.clear();
-
-                for (int c = bi * frametype; c < (bi + 1) * frametype; c++)
-                    Parse_Buffer.push_back(Raw_Buffer[c]);
-
-                int retval = getParsedMeta(Parse_Buffer, BoardId_Buffer[bi]);
-                if (retval != 0) {
-                    std::cout << "  WARNING: meta parse failed"
-                              << " entry=" << entry
-                              << " board=" << BoardId_Buffer[bi]
-                              << " retval=" << retval << std::endl;
-                    totalFailed++;
+                if (!success) {
+                    delete Ldata;
                     continue;
-                }   
+                }
 
-                WriteCSVRow(csv, entry, globalEntry, path, meta);
-            }   
+                std::vector<unsigned short>& Raw_Buffer    = Ldata->RawWaveform;
+                std::vector<int>&            BoardId_Buffer = Ldata->BoardIndex;
+                unsigned int lappdID = Ldata->LAPPD_ID;
 
-            globalEntry++;
-            fileDataEvents++;
-            delete Ldata;
-        }   
+                if (Raw_Buffer.empty() || BoardId_Buffer.empty()) {
+                    delete Ldata;
+                    continue;
+                }
 
-        std::cout << "  Data frames: " << fileDataEvents
-                  << "  PPS frames skipped: " << filePPSEvents << std::endl;
+                int frametype = (int)(Raw_Buffer.size() / BoardId_Buffer.size());
+
+                // Skip PPS frames
+                if (frametype != NUM_VECTOR_DATA) {
+                    filePPSEvents++;
+                    totalSkipped++;
+                    lappdIDPPSFrames[lappdID]++;
+                    delete Ldata;
+                    continue;
+                }
+
+                // This key has real data
+                lappdKeysFound[key]++;
+                lappdIDDataFrames[lappdID]++;
+                anyDataFound = true;
+
+                // ── Loop over boards ──────────────────────────────────────
+                int nbi = (int)BoardId_Buffer.size();
+                for (int bi = 0; bi < nbi; bi++) {
+                    meta.clear();
+                    Parse_Buffer.clear();
+
+                    for (int c = bi * frametype; c < (bi + 1) * frametype; c++)
+                        Parse_Buffer.push_back(Raw_Buffer[c]);
+
+                    int retval = getParsedMeta(Parse_Buffer, BoardId_Buffer[bi]);
+                    if (retval != 0) {
+                        std::cout << "  WARNING: meta parse failed"
+                                  << " key="      << key
+                                  << " lappd_id=" << lappdID
+                                  << " entry="    << entry
+                                  << " board="    << BoardId_Buffer[bi] << std::endl;
+                        totalFailed++;
+                        continue;
+                    }
+
+                    WriteCSVRow(csv, entry, globalEntry, path, key, lappdID, meta);
+                }
+
+                delete Ldata;
+            } // end LAPPD key loop
+
+            if (anyDataFound) {
+                fileDataEvents++;
+                globalEntry++;
+            }
+
+        } // end entry loop
+
+        std::cout << "  Data frames : " << fileDataEvents << std::endl;
+        std::cout << "  PPS skipped : " << filePPSEvents  << std::endl;
 
         delete LAPPDData;
         delete RawData;
-    }   
+
+    } // end file loop
 
     csv.close();
 
     // ── Summary ───────────────────────────────────────────────────────────
     std::cout << "\n══════════════════════════════════════" << std::endl;
-    std::cout << "Done!" << std::endl;
-    std::cout << "  Files processed  : " << filePaths.size()  << std::endl;
-    std::cout << "  Data events      : " << globalEntry        << std::endl;
-    std::cout << "  PPS skipped      : " << totalSkipped       << std::endl;
-    std::cout << "  Meta failures    : " << totalFailed        << std::endl;
-    std::cout << "  CSV written to   : lappd_metadata.csv"     << std::endl;
+    std::cout << "Done!"                                    << std::endl;
+    std::cout << "  Files processed  : " << filePaths.size() << std::endl;
+    std::cout << "  Data events      : " << globalEntry       << std::endl;
+    std::cout << "  PPS skipped      : " << totalSkipped      << std::endl;
+    std::cout << "  Meta failures    : " << totalFailed       << std::endl;
+    std::cout << "  CSV written to   : lappd_metadata.csv"    << std::endl;
+    std::cout << "──────────────────────────────────────"      << std::endl;
+
+    // Per key summary
+    int nLAPPDsFound = 0;
+    for (const std::string& key : lappdKeys)
+        if (lappdKeysFound[key] > 0) nLAPPDsFound++;
+
+    std::cout << "  LAPPDs found     : " << nLAPPDsFound << std::endl;
+    for (const std::string& key : lappdKeys) {
+        if (lappdKeysFound[key] > 0)
+            std::cout << "    ✓ " << key << " → "
+                      << lappdKeysFound[key] << " data frames" << std::endl;
+        else
+            std::cout << "    ✗ " << key << " → not found"    << std::endl;
+    }
+
+    // Per LAPPD_ID summary
+    std::cout << "──────────────────────────────────────"      << std::endl;
+    std::cout << "  Per LAPPD_ID breakdown:"                   << std::endl;
+
+    // Collect all seen LAPPD IDs
+    std::map<unsigned int, bool> allIDs;
+    for (auto& kv : lappdIDDataFrames) allIDs[kv.first] = true;
+    for (auto& kv : lappdIDPPSFrames)  allIDs[kv.first] = true;
+
+    for (auto& kv : allIDs) {
+        unsigned int id  = kv.first;
+        int dataFrames   = lappdIDDataFrames.count(id) ? lappdIDDataFrames[id] : 0;
+        int ppsFrames    = lappdIDPPSFrames.count(id)  ? lappdIDPPSFrames[id]  : 0;
+        std::cout << "    LAPPD_ID=" << id
+                  << "  data=" << dataFrames
+                  << "  pps="  << ppsFrames  << std::endl;
+    }
+
     std::cout << "══════════════════════════════════════" << std::endl;
 
     return 0;

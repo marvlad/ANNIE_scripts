@@ -14,7 +14,9 @@
 // ══════════════════════════════════════════════════════════════════════════════
 void WriteCSVHeader(std::ofstream& csv) {
     csv << "global_entry,file_entry,filename,lappd_key,lappd_id,board_id,";
-    for (int chip = 0; chip < 5; chip++) {
+
+    // ── PSEC0–3: plain threshold word (not packed) ────────────────────────
+    for (int chip = 0; chip < 4; chip++) {
         std::string c = "psec" + std::to_string(chip) + "_";
         csv << c << "wilkinson_current,"
             << c << "wilkinson_target,"
@@ -22,11 +24,28 @@ void WriteCSVHeader(std::ofstream& csv) {
             << c << "selftrig_threshold,"
             << c << "provdd,"
             << c << "selftrig_mask,"
-            << c << "selftrig_thresh_word,"
+            << c << "selftrig_thresh_raw,"   // plain ADC value, NOT packed
             << c << "vcdl_count,";
         for (int ch = 0; ch < 6; ch++)
             csv << c << "ch" << ch << "_trig_rate,";
     }
+
+    // ── PSEC4: threshold word IS word 87 — packed trigger config ─────────
+    // [15:12]=trig_mode  [11]=sma_invert  [10]=st_sign  [9:0]=coinc_min
+    csv << "psec4_wilkinson_current,"
+        << "psec4_wilkinson_target,"
+        << "psec4_vbias,"
+        << "psec4_selftrig_threshold,"
+        << "psec4_provdd,"
+        << "psec4_selftrig_mask,"
+        << "psec4_trig_mode,"       // word87 [15:12]
+        << "psec4_sma_invert,"      // word87 [11]
+        << "psec4_st_sign,"         // word87 [10]
+        << "psec4_coinc_min,"       // word87 [9:0]
+        << "psec4_vcdl_count,";
+    for (int ch = 0; ch < 6; ch++)
+        csv << "psec4_ch" << ch << "_trig_rate,";
+
     csv << "beamgate_raw,beamgate_ns,"
         << "timestamp_raw,timestamp_ns,"
         << "clockcycle,"
@@ -63,22 +82,28 @@ void WriteCSVRow(std::ofstream& csv,
 
     // ── Per-chip fields ───────────────────────────────────────────────────
     // Layout in meta per chip (20 words each, starting at offset 1):
-    //   o+0  chip header (0xDCBN)
-    //   o+1  wilkinson current
-    //   o+2  wilkinson target
-    //   o+3  vbias
-    //   o+4  selftrig threshold setting
-    //   o+5  provdd
-    //   o+6  trigger info 0 (beamgate slice — decoded below)
-    //   o+7  selftrig mask
-    //   o+8  selftrig threshold word
-    //   o+9  timestamp slice  (decoded below)
-    //   o+10 event count slice
-    //   o+11 vcdl [15:0]
-    //   o+12 vcdl [31:16]
-    //   o+13 dllvdd
-    //   o+14..o+19  6 self-trig rate counts (one per channel)
-    for (int chip = 0; chip < 5; chip++) {
+    //   o+0   chip header   (0xDCBN)
+    //   o+1   wilkinson current
+    //   o+2   wilkinson target
+    //   o+3   vbias
+    //   o+4   selftrig threshold setting
+    //   o+5   provdd
+    //   o+6   trigger info 0:
+    //           PSEC0-3 → beamgate slice (decoded below, not written per-chip)
+    //           PSEC4   → word 87, packed: [15:12] mode [11] inv [10] sign [9:0] coinc
+    //   o+7   selftrig mask
+    //   o+8   selftrig threshold word:
+    //           PSEC0-3 → plain ADC threshold value
+    //           PSEC4   → selftrig threshold for PSEC4 (separate from word87)
+    //   o+9   timestamp slice (decoded below)
+    //   o+10  event count slice
+    //   o+11  vcdl [15:0]
+    //   o+12  vcdl [31:16]
+    //   o+13  dllvdd
+    //   o+14..o+19  6 self-trig rate counts
+
+    // ── PSEC0-3: write selftrig_thresh_raw (plain value, no decoding) ─────
+    for (int chip = 0; chip < 4; chip++) {
         int o = 1 + chip * 20;
 
         unsigned int vcdl = ((unsigned int)meta[o + 12] << 16) | meta[o + 11];
@@ -89,8 +114,37 @@ void WriteCSVRow(std::ofstream& csv,
             << meta[o + 4] << ","    // selftrig threshold
             << meta[o + 5] << ","    // provdd
             << meta[o + 7] << ","    // selftrig mask
-            << meta[o + 8] << ","    // selftrig threshold word
+            << meta[o + 8] << ","    // selftrig_thresh_raw (plain ADC, NOT packed)
             << vcdl         << ",";  // vcdl combined 32-bit
+
+        for (int ch = 0; ch < 6; ch++)
+            csv << meta[o + 14 + ch] << ",";
+    }
+
+    // ── PSEC4: decode word 87 (o+6) into its 4 packed fields ─────────────
+    {
+        int o = 1 + 4 * 20;   // PSEC4 offset = 81
+
+        unsigned int vcdl = ((unsigned int)meta[o + 12] << 16) | meta[o + 11];
+
+        // word 87 = meta[o+6] for PSEC4
+        unsigned short w87  = meta[o + 6];
+        unsigned int trig_mode  = (w87 >> 12) & 0xF;   // [15:12]
+        unsigned int sma_invert = (w87 >> 11) & 0x1;   // [11]
+        unsigned int st_sign    = (w87 >> 10) & 0x1;   // [10]
+        unsigned int coinc_min  = w87 & 0x3FF;          // [9:0]
+
+        csv << meta[o + 1] << ","    // wilkinson current
+            << meta[o + 2] << ","    // wilkinson target
+            << meta[o + 3] << ","    // vbias
+            << meta[o + 4] << ","    // selftrig threshold
+            << meta[o + 5] << ","    // provdd
+            << meta[o + 7] << ","    // selftrig mask
+            << trig_mode   << ","    // word87 [15:12] trigger mode
+            << sma_invert  << ","    // word87 [11]    SMA invert
+            << st_sign     << ","    // word87 [10]    self-trig sign
+            << coinc_min   << ","    // word87 [9:0]   coincidence minimum
+            << vcdl        << ",";   // vcdl combined 32-bit
 
         for (int ch = 0; ch < 6; ch++)
             csv << meta[o + 14 + ch] << ",";
@@ -98,6 +152,7 @@ void WriteCSVRow(std::ofstream& csv,
 
     // ── Reconstruct 64-bit beamgate from 4 slices ────────────────────────
     // Slices at meta indices: 7, 27, 47, 67
+    // (= o+6 for PSEC0,1,2,3 = 1+0*20+6, 1+1*20+6, 1+2*20+6, 1+3*20+6)
     unsigned long beamgate_raw =
         ((unsigned long)meta[7]  << 48) |
         ((unsigned long)meta[27] << 32) |
@@ -325,7 +380,6 @@ int main(int argc, char* argv[]) {
     std::cout << "──────────────────────────────────────"      << std::endl;
     std::cout << "  Per LAPPD_ID breakdown:"                   << std::endl;
 
-    // Collect all seen LAPPD IDs
     std::map<unsigned int, bool> allIDs;
     for (auto& kv : lappdIDDataFrames) allIDs[kv.first] = true;
     for (auto& kv : lappdIDPPSFrames)  allIDs[kv.first] = true;
